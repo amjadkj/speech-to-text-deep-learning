@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice to Text</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+            background-image: url('../static/images/pe.jpeg');
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #container {
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 600px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        #output {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            min-height: 100px;
+        }
+
+        button {
+            margin: 10px;
+            padding: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        #copyButton, #convertButton {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+        }
+
+        #copyButton:hover, #convertButton:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>Voice to Text</h1>
+        <form id="uploadForm" enctype="multipart/form-data">
+            <input type="file" id="fileInput" name="audio" onchange="playSelectedFile()">
+            <button id="copyButton" onclick="copyText()">Copy Text</button>
+            <audio id="audioPlayer" controls></audio>
+            <div id="output"></div>
+
+            <button id="convertButton" type="button" onclick="convertAudio()">Convert</button>
+        </form>
+        <button id="recordButton" onclick="recordAudio()">Record</button>
+        <button id="stopButton" disabled onclick="stopRecording()">Stop Recording</button>
+
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let chunks = [];
+        let recordedVoiceBlob;
+        let selected;
+
+        function recordAudio() {
+            navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000 } })
+                .then(function (stream) {
+                    mediaRecorder = new MediaRecorder(stream);
+
+                    mediaRecorder.ondataavailable = function (event) {
+                        if (event.data.size > 0) {
+                            chunks.push(event.data);
+                        }
+                    };
+
+                    mediaRecorder.onstop = function () {
+                        const blob = new Blob(chunks, { type: 'audio/wav' });
+                        recordedVoiceBlob = blob;
+                        const audioUrl = URL.createObjectURL(blob);
+                        document.getElementById('audioPlayer').src = audioUrl;
+                        chunks = [];
+                    };
+
+                    mediaRecorder.start();
+                    document.getElementById('recordButton').disabled = true;
+                    document.getElementById('stopButton').disabled = false;
+                })
+                .catch(function (error) {
+                    console.error('Error accessing microphone:', error);
+                });
+        }
+        function stopRecording() {
+            if (mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                document.getElementById('recordButton').disabled = false;
+                document.getElementById('stopButton').disabled = true;
+            }
+        }
+        function convertAudio() {
+            if (recordedVoiceBlob) {
+                var formData = new FormData();
+                formData.append('recorded_audio', recordedVoiceBlob, 'recorded_audio.wav');
+
+                fetch('/record', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('output').innerText = data.text;
+                })
+                .catch(error => console.error('Error:', error));
+            } else {
+                console.log('No audio data to convert.');
+            }
+        }
+
+        function playSelectedFile() {
+            const fileInput = document.getElementById('fileInput');
+            const audioPlayer = document.getElementById('audioPlayer');
+
+            const file = fileInput.files[0];
+            if (file) {
+                const audioUrl = URL.createObjectURL(file);
+                audioPlayer.src = audioUrl;
+                selected = file;
+            }
+        }
+
+        function convertAudio() {
+        // Check if either recordedVoiceBlob or selectedFileBlob is available
+            if (selected) {
+                var formData = new FormData();
+                // Add selected file blob if available
+                if (selected) {
+                    formData.append('selected_audio', selected, 'selected_audio.wav');
+                }
+
+                // Send the form data to Flask
+                fetch('/convert', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('output').innerText = data.text;
+                })
+                .catch(error => console.error('Error:', error));
+            } else {
+                console.log('No audio data to convert.');
+            }
+        }
+        function copyText() {
+            const textToCopy = document.getElementById('output').innerText;
+            if (textToCopy) {
+                navigator.clipboard.writeText(textToCopy)
+                    .then(() => alert('Text copied to clipboard'))
+                    .catch(err => console.error('Unable to copy text', err));
+            }
+        }
+         
+    </script>
+</body>
+</html>
